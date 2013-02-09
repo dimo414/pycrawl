@@ -1,0 +1,9 @@
+syntax: glob
+.project
+.pydevproject
+__pycache__
+
+syntax: re
+^bs4/.*
+^httplib2/.*
+^lib/.*
