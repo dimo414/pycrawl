@@ -1,13 +1,14 @@
-#!/bin/bash
+#!/bin/bash -e
 
 python=python3
 repo=$(pwd)
-lib=$repo/lib
+lib="$repo/lib"
 
-mkdir -p $lib
-pushd $lib
+mkdir -p "$lib"
+pushd "$lib" >/dev/null
 
-wget -i $repo/dependancies.txt
+echo Downloading dependancies:
+cat "$repo/dependancies.txt" | wget -nv -i - > wget.output
 
 for gz in *.tar.gz
 do
@@ -15,13 +16,17 @@ do
   rm $gz
 done
 
-for proj in $lib/*
+for proj in "$lib"/*
 do
-  pushd $proj
-  $python setup.py build
-  echo Adding $(ls build/lib) to project
-  mv build/lib/* $repo
-  popd
+  if [ -d "$proj" ]
+  then
+    pushd "$proj" >/dev/null
+    echo Building $(basename "$(pwd)")
+    $python setup.py build > build.output
+    echo Adding $(ls build/lib) to project
+    mv build/lib/* "$repo"
+    popd >/dev/null
+  fi
 done
 
-popd
+popd >/dev/null
