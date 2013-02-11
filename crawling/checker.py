@@ -11,9 +11,12 @@ class Checker:
     
     def isLocal(self, url):
         try:
+            if url.startswith('//'):
+                return False
+            # may trigger an exception - do last
             if url.index(':') < url.index('/'):
                 return False
-        except:
+        except ValueError:
             pass
         return True
     
