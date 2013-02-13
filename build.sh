@@ -7,8 +7,8 @@ lib="$repo/lib"
 mkdir -p "$lib"
 pushd "$lib" >/dev/null
 
-echo Downloading dependancies:
-cat "$repo/dependancies.txt" | wget -nv -i - > wget.output
+echo Downloading dependencies:
+cat "$repo/dependencies.txt" | wget -nv -i - > wget.output
 
 for gz in *.tar.gz
 do
