@@ -4,6 +4,10 @@ Created on Feb 9, 2013
 @author: mdiamond
 '''
 
+#
+# Function combinators
+#
+
 def doAll(*funcs):
     def dAll(*args, **opts):
         for func in funcs:
@@ -39,3 +43,4 @@ def negate(func):
 def failOnError(resp):
     if resp.status != 200:
         raise Exception()
+        

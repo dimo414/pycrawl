@@ -5,9 +5,9 @@ Created on Feb 9, 2013
 '''
 
 import functools, re
-from crawling.checker import basic as basic_c
+from crawling.test import basic as basic_t
 
-class Doer:
+class SoupAction:
     def __init__(self):
         pass
     
@@ -28,7 +28,7 @@ class Doer:
                     print('Found link to %s in %s' % (a['href'], url))
         return func
     
-    def findInternalNoFollow(self, checker=basic_c):
+    def findInternalNoFollow(self, checker=basic_t):
         def func(url, soup):
             for a in soup.findAll('a'):
                 if a.has_key('href') and checker.isLocal(a['href']):
@@ -53,4 +53,4 @@ class Doer:
     def pageTitleContains(self, pat, printTag=False):
         return self.tagContains('title', pat, printTag=printTag)
 
-basic = Doer()
+basic = SoupAction()

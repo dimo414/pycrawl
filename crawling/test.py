@@ -5,15 +5,14 @@ Created on Feb 8, 2013
 '''
 import crawling
 
-class Checker:
+class UrlTest:
     def __init__(self):
         pass
     
     def isLocal(self, url):
+        if url.startswith('//'):
+            return False
         try:
-            if url.startswith('//'):
-                return False
-            # may trigger an exception - do last
             if url.index(':') < url.index('/'):
                 return False
         except ValueError:
@@ -36,4 +35,4 @@ class Checker:
     def excludeLocal(self, exclude):
         return crawling.checkAll(self.isLocal, self.exclude)
         
-basic = Checker()
+basic = UrlTest()
