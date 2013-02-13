@@ -13,14 +13,14 @@ from bs4 import BeautifulSoup
 http = httplib2.Http()
 
 class Crawler:
-    def __init__(self, check, do):
+    def __init__(self, test, action):
         self.hit_urls = set()
         self.max_urls = None
         self.resp_handler = None
-        self.check = check
-        self.do = do
-        if not (self.check and self.do):
-            raise Exception("This is not allowed! %s, %s" % (self.check, self.do))
+        self.test = test
+        self.action = action
+        if not callable(self.test) or not callable(self.action):
+            raise Exception("Must pass callable test and action parameters")
     
     def setResponseHandler(self, resp):
         self.resp_handler = resp
@@ -51,7 +51,7 @@ class Crawler:
             for link in soup.find_all('a'):
                 if link.has_key('href'):
                     rel_url = link['href']
-                    if(rel_url and self.check(rel_url)):
+                    if(rel_url and self.test(rel_url)):
                         self._crawl(uparse.urljoin(url,rel_url), depth-1)
     
     def checkUrl(self, url):
@@ -72,7 +72,7 @@ class Crawler:
             if self.resp_handler:
                 self.resp_handler(response)
             
-            self.do(url, soup)
+            self.action(url, soup)
             return soup
         except Exception as e:
             print("Failed to crawl/parse %s\n  %s" % (url,e), file=sys.stderr)
