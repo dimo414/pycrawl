@@ -4,7 +4,7 @@ Created on Feb 9, 2013
 @author: mdiamond
 '''
 
-import sys
+import sys, time
 from datetime import datetime
 import urllib.parse as uparse
 import httplib2
@@ -16,17 +16,26 @@ class Crawler:
     def __init__(self, test, action):
         self.hit_urls = set()
         self.max_urls = None
+        self.max_hpm = None
+        self.user_agent = None
+        
         self.resp_handler = None
         self.test = test
         self.action = action
         if not callable(self.test) or not callable(self.action):
             raise Exception("Must pass callable test and action parameters")
     
-    def setResponseHandler(self, resp):
-        self.resp_handler = resp
-    
     def setMaxUrls(self, maxCount):
         self.max_urls = maxCount
+        
+    def setMaxHitsPerMin(self, max):
+        self.max_hpm = max
+    
+    def setUserAgent(self, ua):
+        self.user_agent = ua
+    
+    def setResponseHandler(self, resp):
+        self.resp_handler = resp
     
     def reset(self):
         self.hit_urls = set()
@@ -79,6 +88,12 @@ class Crawler:
             return None
         
     def hitUrl(self, url):
-        response, content = http.request(url)
+        if self.max_hpm:
+            time.sleep(60.0 / self.max_hpm)
+        
+        headers = {}
+        if self.user_agent:
+            headers['user-agent'] = self.user_agent
+        response, content = http.request(url, headers=headers)
         soup = BeautifulSoup(content)
         return (response, soup)
