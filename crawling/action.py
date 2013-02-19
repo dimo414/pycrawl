@@ -52,5 +52,16 @@ class SoupAction:
     
     def pageTitleContains(self, pat, printTag=False):
         return self.tagContains('title', pat, printTag=printTag)
+    
+    def _tagPath(self, tag, incIndicies=False):
+        '''Outputs the path from the document root to this tag'''
+        def idClassStr(tag):
+            '''Given a tag, return a string of it's ID / classes, or the empty string'''
+            tId = '#%s' % tag['id'] if tag.has_key('id') else ''
+            tClass = '.%s' % '.'.join(tag['class']) if tag.has_key('class') else ''
+            return '%s%s' % (tId, tClass)
+        # Exclude the root and reverse the parent list so we go from html down to tag
+        tagLs = (list(paren for paren in tag.parents if paren.name != '[document]')[::-1]+[tag])
+        return ' '.join('%s%s%s' % (tag.name, ':%s' % len(list(tag.previous_siblings)) if incIndicies else '', idClassStr(tag)) for tag in tagLs)
 
 basic = SoupAction()
