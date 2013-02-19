@@ -62,6 +62,6 @@ class SoupAction:
             return '%s%s' % (tId, tClass)
         # Exclude the root and reverse the parent list so we go from html down to tag
         tagLs = (list(paren for paren in tag.parents if paren.name != '[document]')[::-1]+[tag])
-        return ' '.join('%s%s%s' % (tag.name, ':%s' % len(list(tag.previous_siblings)) if incIndicies else '', idClassStr(tag)) for tag in tagLs)
+        return ' '.join('%s%s%s' % (elem.name, ':%s' % len(list(elem.previous_siblings)) if incIndicies else '', idClassStr(elem)) for elem in tagLs)
 
 basic = SoupAction()

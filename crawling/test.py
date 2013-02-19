@@ -20,6 +20,7 @@ class UrlTest:
         return True
     
     def include(self, include):
+        include = list(include)
         def func(url):
             return any(s in url for s in include)
         return func
@@ -30,9 +31,9 @@ class UrlTest:
         return func
     
     def includeLocal(self, include):
-        return crawling.checkAll(self.isLocal, self.include)
+        return crawling.checkAll(self.isLocal, self.include(include))
     
     def excludeLocal(self, exclude):
-        return crawling.checkAll(self.isLocal, self.exclude)
+        return crawling.checkAll(self.isLocal, self.exclude(exclude))
         
 basic = UrlTest()
