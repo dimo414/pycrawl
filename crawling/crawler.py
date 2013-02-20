@@ -10,7 +10,12 @@ import urllib.parse as uparse
 import httplib2
 from bs4 import BeautifulSoup
 
+# Basic, request-agnostic http crawler
 http = httplib2.Http()
+# Caching enabled, since Crawler attempts to avoid hitting pages more than once, not terribly useful
+#http = httplib2.Http('/tmp/.httplib2_cache')
+# Cookies persist between requests, replicates a user session
+#http = httplib2.Http(handle_cookies=True)
 
 class Crawler:
     def __init__(self, test, action):
@@ -35,6 +40,8 @@ class Crawler:
         self.user_agent = ua
     
     def setResponseHandler(self, resp):
+        if not callable(resp):
+            raise Exception("Must pass callable response handler")
         self.resp_handler = resp
     
     def reset(self):
@@ -43,6 +50,9 @@ class Crawler:
     def crawlAll(self, urls, depth):
         for url in urls:
             self.crawl(url, depth)
+    
+    def crawlStdIn(self, depth):
+        self.crawAll(sys.stdin.readlines(), depth)
 
     def crawl(self, url, depth):
         startSet = len(self.hit_urls)
