@@ -49,7 +49,16 @@ do
   then
     pushd "$proj" >/dev/null
     echo
-    echo Building $(basename "$(pwd)")
+    proj_name=$(basename "$(pwd)")
+    patch="$repo"/patches/"$proj_name".diff
+    echo $patch
+    echo [ -e "$patch" ]
+    if [ -e "$patch" ]
+    then
+       echo Applying patch to $proj_name
+       patch -p0 -i "$patch"
+    fi
+    echo Building $proj_name
     $python setup.py build > build.output
     echo Adding $(ls build/lib) to project
     echo Alternatively run '`'cd "$(pwd)"';' $python setup.py install'`' to install library
