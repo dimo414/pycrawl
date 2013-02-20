@@ -1,4 +1,5 @@
 Need to add a rate throttler to crawler                      | owner:Michael, open:False, id:90e604f96c485a8259a8035ced413ed899108e29, time:1360590098.1
 add setUserAgent to crawler                                  | owner:Michael, open:False, id:a58f0eea62d602a373ef8c5e35f6e0bf811bec0e, time:1360590136.34
 Need to create proper setup script                           | owner:Michael, open:True, id:ad9b73b5c58e63cf9e4fca9b6e389164bc5d00a1, time:1360453557.65
-Add docstrings                                               | owner:Michael, open:True, id:d023838c7856936a3deb48d480304558b3e05e34, time:1360823446.28
+Add docstrings                                               | owner:Michael, open:False, id:d023838c7856936a3deb48d480304558b3e05e34, time:1360823446.28
+Add setting to Crawler to print stack trace when crawling fails (Crawler.checkUrl()) | owner:Michael, open:True, id:dcbd5e6319d4b506b5ae5d71bc4ec28cf1f68eec, time:1361345299.29
