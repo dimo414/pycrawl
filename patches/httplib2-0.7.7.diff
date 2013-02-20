@@ -1,0 +1,607 @@
+diff -r e78fbc336997 -r 956ea1efe7a1 python3/httplib2/__init__.py
+--- python3/httplib2/__init__.py	Mon Nov 12 13:53:06 2012 -0500
++++ python3/httplib2/__init__.py	Wed Feb 20 00:07:02 2013 -0500
+@@ -56,6 +56,8 @@
+ except ImportError:
+     socks = None
+ 
++from datetime import datetime
++
+ from .iri2uri import iri2uri
+ 
+ def has_timeout(timeout):
+@@ -850,7 +852,8 @@
+     """
+     def __init__(self, cache=None, timeout=None,
+                  proxy_info=proxy_info_from_environment,
+-                 ca_certs=None, disable_ssl_certificate_validation=False):
++        ca_certs=None, disable_ssl_certificate_validation=False,
++        handle_cookies=False, reject_public_suffix=True):
+         """If 'cache' is a string then it is used as a directory name for
+         a disk cache. Otherwise it must be an object that supports the
+         same interface as FileCache.
+@@ -915,6 +918,18 @@
+ 
+         # Keep Authorization: headers on a redirect.
+         self.forward_authorization_headers = False
++        
++        # Flag to enable automatic cookie handling
++        self.handle_cookies = handle_cookies
++
++        # Initialize the cookie store
++        self.cookies = CookieStore() 
++
++        # Flag to reject cookies with DNS public suffixes for domains
++        self.reject_public_suffix = reject_public_suffix
++
++        # Inialize the public suffix store
++        self.public_suffixes = PublicSuffixStore()
+ 
+     def __getstate__(self):
+         state_dict = copy.copy(self.__dict__)
+@@ -1007,6 +1022,33 @@
+                 else:
+                     content = response.read()
+                 response = Response(response)
++
++                # If cookie handling has been enabled and there
++                # is a set-cookie header in the repsonse
++                if self.handle_cookies and 'set-cookie' in response:
++                    # Determine the scheme in use
++                    if isinstance(conn, HTTPConnectionWithTimeout):
++                        scheme = "http"
++                    elif isinstance(conn, HTTPSConnectionWithTimeout):
++                        scheme = "https"
++                    else:
++                        scheme = ""
++
++                    # Parse the cookies from the set-cookie header. The Response
++                    # class contatenates the contents of multiple set-cookie
++                    # headers (recreating the behavior of httplib in python2) so
++                    # they need to be parsed back out into individual cookies
++                    for c in Cookie.parse(response['set-cookie']):
++                        # Create the cookie object
++                        if self.reject_public_suffix:
++                            cookie = Cookie(c, scheme, conn.host, request_uri, self.public_suffixes)
++                        else:
++                            cookie = Cookie(c, scheme, conn.host, request_uri)
++
++                        # If everything went well add the cookie to the store
++                        if not cookie.reject:
++                            self.cookies.add(cookie)
++
+                 if method != "HEAD":
+                     content = _decompressContent(response, content)
+ 
+@@ -1131,6 +1173,13 @@
+                 scheme = 'https'
+                 authority = domain_port[0]
+ 
++            # Build the cookie header from the stored cookies. If the cookie header
++            # already has a value that value overrides the automatic cookie handling
++            if self.handle_cookies and not 'cookie' in headers:
++                cookie_hdr = self.cookies.build_cookie_str(scheme, authority, request_uri)
++                if cookie_hdr != None and len(cookie_hdr) > 0:
++                    headers['cookie'] = cookie_hdr
++
+             conn_key = scheme+":"+authority
+             if conn_key in self.connections:
+                 conn = self.connections[conn_key]
+@@ -1299,6 +1348,21 @@
+  
+         return (response, content)
+ 
++    def clear_cookies(self):
++        """Delete all cookies"""
++        self.cookies.clear()
++
++    def purge_session_cookies(self):
++        """Delete all non-persistent cookies"""
++        # Non-persistent cookies are deleted at the end of a session where
++        # the user-agent is responsible for defining what a session is. Calling
++        # this method ends a session as far as cookies are concerned.
++        self.cookies.purge_session()
++
++    def purge_expired_cookies(self):
++        """Delete all expired cookies"""
++        self.cookies.purge_expired()
++
+  
+ 
+ class Response(dict):
+@@ -1347,3 +1411,495 @@
+             return self 
+         else:  
+             raise AttributeError(name) 
++
++
++
++class Cookie(object):
++    """An object containing an RFC 6265-compliant cookie"""
++
++    # Properties that are explicitly set in the cookie
++    """Cookie name"""
++    name = None
++
++    """Cookie value"""
++    value = None
++
++    """Expiration time"""
++    expires = None
++
++    """Cookie domain"""
++    domain = None
++
++    """Cookie path"""
++    path = None
++
++    """Secure flag"""
++    secure = False
++
++    """HttpOnly flag"""
++    httponly = False
++
++    # Properties that are implicitly derived
++    """Host-only flag"""
++    hostonly = True
++
++    """Persistent flag"""
++    persistent = False
++
++    """Cookie creation time"""
++    creation_time = None
++
++    """Cookie access time"""
++    last_access_time = None
++
++    """Cookie source flag (HTTP or not)"""
++    fromhttp = True
++
++    """Acceptance/rejection determination"""
++    reject = False
++
++    # Date format definitions from RFC 2616
++    RFC1123 = "%a, %d %b %Y %H:%M:%S GMT"
++    RFC850 = "%A, %d-%b-%y %H:%M:%S GMT"
++    ASCTIME = "%a %b %d %H:%M:%S %Y"
++
++    # Date formats that don't follow the RFC but are out in the wild
++    VARIANT1 = "%a, %d-%b-%Y %H:%M:%S GMT"
++    VARIANT2 = "%a, %d-%b-%y %H:%M:%S GMT"
++
++    def __init__(self, raw, scheme, domain=None, path='/', public_suffixes=None):
++        domain_found = False
++        path_found = False
++        maxage_found = False
++
++        # Get the directory portion of the path
++        idx = path.rfind('/')
++        if idx <= 0:
++            path = '/'
++        else:
++            path = path[0:idx]
++
++        # Parse out the properties
++        for item in raw.split(';'):
++            # Most properties are "key=value"
++            split = item.split('=', 1)
++            key = split[0].lower().lstrip()
++            if len(split) > 1:
++                value = split[1]
++            else:
++                value = None
++
++            if key == "expires":
++                # Max-Age takes precedence over Expires
++                if not maxage_found:
++                    # Attempt to convert the expires value to a datetime
++                    if not self._convert_expires(value):
++                        self.reject = True
++                    else:
++                        self.persistent = True
++            elif key == "max-age":
++                maxage = int(value)
++                # Set the expiration from the max-age
++                if maxage <= 0:
++                    self.expires = datetime.utcnow()
++                else:
++                    self.expires = datetime.utcnow() + timedelta(seconds=maxage)
++                self.persistent = True
++                maxage_found = True
++            elif key == "domain":
++                # The cookie's domain must match or be a parent of the
++                # request domain for the cookie to be accepted
++                if Cookie.validate_domain(domain, value):
++                    self.domain = value
++                    hostonly = False
++
++                    # Do a public suffix check, if configured
++                    if public_suffixes != None and public_suffixes.domain_is_public_suffix(value):
++                        self.reject = True
++                else:
++                    self.reject = True
++            elif key == "path":
++                self.path = value
++                path_found = True
++            elif key == "secure":
++                self.secure = True
++            elif key == "httponly":
++                self.httponly = True
++            else:
++                # The cookie name and value
++                self.name = split[0]
++                self.value = value
++
++        # If the domain field is not included use the request domain but
++        # require an exact match when sending (RFC 6265 sec. 4.1.2.3)
++        if not domain_found:
++            self.domain = domain
++            self.hostonly = True
++
++        # If the path field is not included use the directory portion of
++        # the request uri as the path (RFC 6265 sec. 4.1.2.4)
++        if not path_found:
++            self.path = path
++
++        creation_time = datetime.utcnow()
++        last_access_time = datetime.utcnow()
++
++        # Whether the cookie comes from HTTP must be tracked for later
++        # determinations with regard to accepting or rejecting a duplicate
++        # cookie
++        if scheme == "http" or scheme == "https":
++            self.fromhttp = True
++        else:
++            self.fromhttp = False
++            
++
++    def _convert_expires(self, value):
++        """Convert an Expires value into a datetime"""
++        self.expires = None
++
++        # Attempt to convert the value into a datetime
++        try:
++            self.expires = datetime.strptime(value, Cookie.RFC1123)
++            return True
++        except ValueError:
++            pass
++
++        try:
++            self.expires = datetime.strptime(value, Cookie.RFC850)
++            return True
++        except ValueError:
++            pass
++
++        try:
++            self.expires = datetime.strptime(value, Cookie.ASCTIME)
++            return True
++        except ValueError:
++            pass
++
++        try:
++            self.expires = datetime.strptime(value, Cookie.VARIANT1)
++            return True
++        except ValueError:
++            pass
++
++        try:
++            self.expires = datetime.strptime(value, Cookie.VARIANT2)
++            return True
++        except ValueError:
++            pass
++
++        return False
++
++
++    @staticmethod
++    def parse(header):
++        """Parse a Set-Cookie header into individual cookie strings"""
++
++        cookies = []
++        skip_next = False
++
++        # Multiple cookies are comma-delimited when coming from httplib,
++        # however a comma can also appear in the "expires=" date. If this
++        # happens the end of the cookie will be "expires=XYZ" where XYZ
++        # is the day of the week. In this case the cookie has been
++        # accidentally split in two and needs to be reassembled
++        split = header.split(',')
++        for i, s in enumerate(split):
++            # Skip any processing during this iteration?
++            if skip_next:
++                skip_next = False
++                continue
++
++            cookie = s.lstrip()
++            lower = cookie.lower()
++
++            # Did the split find a comma in the expires date?
++            if lower.find("expires=") >= 0 and lower.rfind("expires=") == len(lower) - len("expires=") - 3:
++                # Put the comma back in and reassemble to two halves of the cookie string
++                cookie += "," + split[i+1]
++                # Flag so that the second half of the cookie doesn't get processed
++                skip_next = True
++            
++            # Add the cookie to the list
++            cookies.append(cookie)
++
++        return cookies
++
++    def __str__(self):
++        cookie = "%s=%s" % (self.name, self.value)
++        if self.expires != None:
++            cookie += "; Expires=%s" % self.expires.strftime(self.RFC1123)
++        if len(self.domain) > 0:
++            cookie += "; Domain=%s" % self.domain
++        if len(self.path) > 0:
++            cookie += "; Path=%s" % self.path
++        if self.secure:
++            cookie += "; Secure"
++        if self.httponly:
++            cookie += "; HttpOnly"
++
++        return cookie
++
++    def match_domain(self, domain):
++        """Match the cookie domain according to the rules in the RFC"""
++
++        # If the domain matches exactly
++        if self.domain == domain:
++            return True
++
++        # If the domain doesn't match exactly but must
++        if self.hostonly:
++            return False
++
++        # If the domain is contained
++        idx = domain.find(self.domain)
++        if idx >= 0:
++            if idx == len(domain) - len(self.domain):
++                if idx > 0 and domain[idx-1] == '.':
++                    return True
++                if self.domain[0] == '.':
++                    return True
++
++        return False
++
++    def match_path(self, path):
++        """Match the cookie path according to the rules in the RFC"""
++        #If the path matches exactly
++        if self.path == path:
++            return True
++
++        # If the cookie path is contained in the request path and there
++        # is an appropriately-placed path separator
++        idx = path.find(self.path)
++        if idx == 0:
++            if self.path[-1] == '/' or path[len(self.path)] == '/':
++                return True
++
++        return False
++
++    def expired(self):
++        """Determine if the cookie is expired"""
++        if not self.persistent or (self.expires != None and self.expires > datetime.utcnow()):
++            return False
++
++        return True
++            
++    @staticmethod
++    def validate_domain(request_domain, cookie_domain):
++        """Match the cookie domain according to the rules in the RFC"""
++        # If the domain matches exactly
++        if cookie_domain == request_domain:
++            return True
++
++        # If the domain is contained
++        idx = request_domain.find(cookie_domain)
++        if idx >= 0:
++            if idx == len(request_domain) - len(cookie_domain):
++                if idx > 0 and request_domain[idx-1] == '.':
++                    return True
++                if cookie_domain[0] == '.':
++                    return True
++
++        return False
++
++
++
++class CookieStore(dict):
++    """A collection object to store multiple cookies.
++The CookieStore is a multi-level dictionary for the storage and
++retrieval of cookies. A cookie is identitifed by domain, path,
++and name. The top-level dictionary uses (domain,path) as the key
++with a name keyed dictionary as the value. This allows for easy
++retrival determination of if a cookie already exists when new
++cookies arrive."""
++
++    def __init__(self):
++        self = {}
++
++    def add(self, cookie):
++        """Add a new cookie to the store. If an old cookie already exists
++a determination, according to the rules in RFC 6265, will be made as to
++whether to replace the old cookie with the new one or to discard the new
++cookie"""
++        # Does a cookie dict for the same domain and path already exist?
++        if (cookie.domain, cookie.path) in self:
++            if cookie.name in self[(cookie.domain, cookie.path)]:
++                old_cookie = self[(cookie.domain, cookie.path)][cookie.name]
++                
++                # If the old cookie specified HTTP-only and the new cookie
++                # didn't come over HTTP ignore the new cookie
++                if old_cookie.httponly and not cookie.fromhttp:
++                    return False
++                
++                cookie.creation_time = old_cookie.creation_time
++        else:
++            self[(cookie.domain, cookie.path)] = {}
++
++        self[(cookie.domain, cookie.path)][cookie.name] = cookie
++
++    def delete(self, cookie):
++        """Delete a cookie from the store"""
++        del self[(cookie.domain, cookie.path)][cookie.name]
++        if len(self[(cookie.domain, cookie.path)]) == 0:
++            del self[(cookie.domain, cookie.path)]
++
++    def purge_expired(self):
++        """Delete all expired cookies"""
++        keytoremove = []
++        for (domain,path),v in self.items():
++            nametoremove = []
++            for name,cookie in v.items():
++                if cookie.expired():
++                    nametoremove.append(name)
++                for name in nametoremove:
++                    del v[name]
++            if len(v) == 0:
++                keytoremove.append((domain,path))
++
++        for key in keytoremove:
++            del self[(domain,path)]
++
++    def purge_session(self):
++        """Delete all non-persistent cookies"""
++        # Non-persistent cookies are deleted at the end of a session where
++        # the user-agent is responsible for defining what a session is. Calling
++        # this method ends a session as far as cookies are concerned.
++        keytoremove = []
++        for (domain,path),v in self.items():
++            nametoremove = []
++            for name,cookie in v.items():
++                if not cookie.persistent:
++                    nametoremove.append(name)
++            for name in nametoremove:
++                del v[name] 
++            if len(v) == 0:
++                keytoremove.append((domain,path))
++
++        for key in keytoremove:
++            del self[key]
++
++    def build_cookie_str(self, scheme, authority, request_uri):
++        """Build a string to be placed in the HTTP request Cookie header"""
++        cookies = ''
++        count = 0
++        for (domain,path),v in self.items():
++            for name,cookie in v.items():
++                if cookie.match_domain(authority) and cookie.match_path(request_uri) and not cookie.expired():
++                    if (not cookie.secure or scheme == "https") and (not cookie.httponly or scheme[:4] == "http"):
++                        if count == 0:
++                            cookies = "%s=%s" % (cookie.name, cookie.value)
++                        else:
++                            cookies += "; %s=%s" % (cookie.name, cookie.value)
++                        count += 1
++        return cookies
++
++
++
++class PublicSuffix(object):
++    """An object containing a DNS public suffix rule"""
++
++    """The label components of the suffix rule"""
++    labels = []
++
++    """Exception rule flag"""
++    exception = False
++
++    def __init__(self, raw):
++        # Exception rules start with !
++        if raw[0] == '!':
++            self.exception = True
++            raw = raw[1:]
++
++        # A leading dot is accepted but unnecessary
++        if raw[0] == '.':
++            raw = raw[1:]
++
++        # Split rule into labels
++        self.labels = raw.split('.')
++        self.labels.reverse()
++
++    def match(self, domain):
++        """Determine if the domain matches the public suffix"""
++
++        # Trim off any leading .
++        if domain[0] == '.':
++            domain = domain[1:]
++
++        # Split the domain into labels
++        domain_labels = domain.split('.')
++        domain_labels.reverse()
++
++        # Label count must match
++        if len(domain_labels) != len(self.labels):
++            return False
++
++        # Check the labels for matching
++        match = True
++        for i, label in enumerate(self.labels):
++            if label != domain_labels[i] and label != '*':
++                match = False
++                break
++        
++        return match
++
++    def __str__(self):
++        return str(self.labels)
++
++
++class PublicSuffixStore(list):
++    """An object containing a collection of DNS public suffixes."""
++
++    def __init__(self):
++        self = []
++
++    def clear(self):
++        self = []
++
++    def load(self, filename):
++        """Load the public suffixes from a file. The file must conform
++to the format definition described at http://publicsuffix.org"""
++
++        success = True
++
++        try:
++            fd = open(filename, 'r')
++            for line in fd:
++                l = line.strip()
++
++                # Skip blank lines or comments
++                if l == "" or l[:2] == "//":
++                    continue
++
++                # Read each line up to the first whitespace
++                rule = l.split()[0]
++
++                self.append(PublicSuffix(rule))
++
++            fd.close()
++        except IOError:
++            success = False
++
++        return success
++            
++
++    def domain_is_public_suffix(self, domain):
++        """Determine if the domain is actually a public suffix"""
++
++        # Defeault rule is a single wildcard
++        default = PublicSuffix("*")
++        matches = 0
++
++        # Find all matches
++        for suffix in self:
++            if suffix.match(domain):
++                # If an exception rule is found it will override the matches
++                if suffix.exception:
++                    return False
++                else:
++                    matches += 1
++
++        if matches > 0:
++            return True
++        else:
++            return default.match(domain)
++            
