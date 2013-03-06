@@ -1,71 +1,111 @@
 #!/bin/bash -e
 
+# 
+# Essentially a make script, but since we don't want to bother making
+# if a package is already available to Python, this seems reasonable.
+# 
+# For each dependency in dependencies.txt, download .tar.gz, build,
+# and install to the repo root, only if missing, only if dependency
+# cannot be imported by Python
+# 
+# ./build.sh             download all necessary files
+# ./build.sh clean       remove all installed files
+# ./build.sh clean all   combination of above two commands
+# 
+
 python=python3
 repo=$(pwd)
+depFile="$repo/dependencies.txt"
 lib="$repo/lib"
 
-if [ -d "$lib" ]
+clean() {
+  echo "Cleaning Repository"
+  rm -rf "$lib" $(cat "$depFile" | cut -d$'\t' -f 1)
+}
+
+wgetFile() {
+  echo "$2" | wget -nc -nv -i - > $1.wget.output 2>&1
+}
+
+installPyLib() {
+  mkdir -p "$lib"
+  cd "$lib"
+  
+  wgetFile $1 $2
+  
+  compFile=$(basename $2)
+  tar -xzf $compFile
+  cd $(echo $compFile | sed 's`.tar.gz``')
+  
+  patch="$repo"/patches/"$1".diff
+  if [ -e "$patch" ]
+  then
+    echo Applying patch to $1
+    patch -p0 -i "$patch"
+  fi
+  
+  echo Building $1
+  $python setup.py build > build.output
+  echo Adding $(ls build/lib) to project
+  echo Alternatively run '`'cd '"'"$(pwd)"'";' $python setup.py install'`' to install library
+  mv build/lib/* "$repo"
+   
+  cd "$repo"
+}
+
+#
+# Script
+#
+
+_all=$(cat "$depFile" | cut -d$'\t' -f 1)
+depend=""
+
+while [ $# -ne 0 ]
+  do
+    if echo $_all | grep $1 > /dev/null
+    then
+      depend="$depend $1"
+    elif [[ $1 == 'clean' ]]
+    then
+      clean='clean'
+    elif [[ $1 == 'all' ]]
+    then
+      depend=$_all
+      break
+    fi
+    
+    shift
+done
+
+depend=$(echo $clean $depend | xargs)
+
+if [ -z "$depend" ]
+then
+  depend=$_all
+fi
+
+if [ -d "$lib" ] && ! echo $depend | grep 'clean' > /dev/null
 then
   echo Lib directory already exists
-  echo "  rm -rf $lib"
-  echo To download dependancies again
+  echo "  $0 clean"
+  echo To trigger clean build
   echo
 fi
 
-echo Checking dependencies:
-cat "$repo/dependencies.txt" | while read -r line
+for dep in $depend
 do
-  dep=$(echo "$line" | cut -d$'\t' -f 1)
-  source=$( echo "$line" | cut -d$'\t' -f 2)
-  if $python -c "import $dep" > /dev/null 2>&1
+  if [[ $dep == 'clean' ]]
   then
-    echo $dep already installed
+    clean
   else
-    echo Downloading $dep from $source
-    
-	mkdir -p "$lib"
-	pushd "$lib" >/dev/null
-    echo $source | wget -nv -i - >> wget.output 2>&1
-    popd > /dev/null
-  fi
-done
-
-if [ ! -d "$lib" ] # no files downloaded
-then
-  exit 0
-fi
-
-pushd "$lib" >/dev/null
-
-for gz in $(ls | grep '.*\.tar\.gz')
-do
-  tar -xzf $gz
-  rm $gz
-done
-
-for proj in *
-do
-  if [ -d "$proj" ]
-  then
-    pushd "$proj" >/dev/null
-    echo
-    proj_name=$(basename "$(pwd)")
-    patch="$repo"/patches/"$proj_name".diff
-    echo $patch
-    echo [ -e "$patch" ]
-    if [ -e "$patch" ]
+    source=$(cat "$depFile" | grep '^'$dep | cut -d$'\t' -f 2)
+    if $python -c "import $dep" > /dev/null 2>&1
     then
-       echo Applying patch to $proj_name
-       patch -p0 -i "$patch"
+      echo $dep already installed
+    else
+      echo Installing $dep from $source
+      installPyLib $dep $source
     fi
-    echo Building $proj_name
-    $python setup.py build > build.output
-    echo Adding $(ls build/lib) to project
-    echo Alternatively run '`'cd "$(pwd)"';' $python setup.py install'`' to install library
-    rm -rf "$repo/$(ls build/lib)"
-    mv build/lib/* "$repo"
-    popd >/dev/null
+    echo
   fi
 done
-
-popd >/dev/null
