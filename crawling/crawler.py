@@ -37,6 +37,7 @@ class Crawler:
         self.max_hpm = None
         self.user_agent = None
         
+        self.cookies = {}
         self.resp_handler = None
         self.test = test
         self.action = action
@@ -50,6 +51,10 @@ class Crawler:
     def setMaxHitsPerMin(self, max):
         """If set, throttles crawl speed to max requests per minute."""
         self.max_hpm = max
+    
+    def addCookie(self, name, value):
+      """Specify a cookie to be sent with every request"""
+      self.cookies[name] = value
     
     def setUserAgent(self, ua):
         """Specifies a user-agent to crawl as.  Uses httplib2's default if not set."""
@@ -142,6 +147,9 @@ class Crawler:
         headers = {}
         if self.user_agent:
             headers['user-agent'] = self.user_agent
+        if self.cookies:
+            headers['cookie'] = '; '.join(['%s=%s' % (key, value) for (key, value) in self.cookies.items()])
         response, content = http.request(url, headers=headers)
+        print(response)
         soup = BeautifulSoup(content)
         return (response, soup)
