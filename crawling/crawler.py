@@ -150,6 +150,5 @@ class Crawler:
         if self.cookies:
             headers['cookie'] = '; '.join(['%s=%s' % (key, value) for (key, value) in self.cookies.items()])
         response, content = http.request(url, headers=headers)
-        print(response)
         soup = BeautifulSoup(content)
         return (response, soup)
