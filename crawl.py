@@ -1,7 +1,7 @@
 '''
 Created on Feb 9, 2013
 
-@author: mdiamond
+@author:     Michael Diamond
 '''
 
 import sys

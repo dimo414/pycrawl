@@ -23,7 +23,7 @@ class UrlTest:
     
     def isLocal(self, url):
         """Only crawl URLs  local to the current host."""
-        if url.startswith('//') or url.startswith('mailto'):
+        if url.startswith('//') or url.startswith('mailto') or url.startswith('javascript'):
             return False
         try:
             if url.index(':') < url.index('/'):

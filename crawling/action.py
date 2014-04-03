@@ -41,6 +41,18 @@ class SoupAction:
                     print('Found link to %s in %s' % (a['href'], url))
         return func
     
+    def findLinkImg(self, string, one_per_page=False):
+      """Prints image URLs (and the page they were found on) with links to the given image URL."""
+      def func(url, soup):
+        for a in soup.findAll('a'):
+          for img in a.findAll('img'):
+            if img.has_key('src') and string in img['src']:
+              print('Found image link %s in %s' % (img['src'], url))
+              if one_per_page:
+                return
+      return func
+          
+    
     def findInternalNoFollow(self, checker=basic_t):
         """Looks for internal links (as determined by a UrlTest instance) which
         have been nofollowed, and prints the link and the current URL."""
