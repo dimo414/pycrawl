@@ -99,7 +99,7 @@ class Crawler:
     def _crawl(self, url, depth):
         """Helper method for crawl(), doesn't write "Starting ..." and "Hit ..."
         messages to standard error."""
-        soup = self.checkUrl(url)
+        soup = self.checkUrl(url.partition('#')[0]) # avoid anchor URLs
         
         if soup and depth > 0:
             for link in soup.find_all('a'):
