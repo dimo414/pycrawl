@@ -5,6 +5,7 @@ __pycache__
 *.pyc
 
 syntax: re
+^pycrawl\..*\.log$
 ^bs4/.*
 ^httplib2/.*
 ^lib/.*
