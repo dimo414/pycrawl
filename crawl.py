@@ -4,7 +4,7 @@ Created on Feb 9, 2013
 @author:     Michael Diamond
 '''
 
-import os.path, sys
+import os, os.path, sys
 if sys.version_info < (3, 0):
     sys.stdout.write("PyCrawl is a Python 3 app.  Go upgrade already.")
     sys.exit(1)
@@ -25,6 +25,8 @@ def configure(argv):
     
     (opts, _) = parser.parse_args(sys.argv)
     
+    if not os.path.exists(opts.log_dir):
+      os.mkdir(opts.log_dir)
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s\t%(name)s\t%(levelname)s:\t%(message)s',
                         datefmt='%m-%d %H:%M',

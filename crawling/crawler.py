@@ -86,7 +86,7 @@ class Crawler:
         Note that the initial URL is not checked against the crawler's test, only
         URLs found on page are subject to this filter."""
         startSet = len(self.hit_urls)
-        self.page("Starting crawl of %s", url)
+        self.page("Starting crawl of %s to %s depth", url, depth)
         sys.stderr.flush()
         self._crawl(url, depth)
         self.page('Hit %d pages', (len(self.hit_urls)-startSet))
