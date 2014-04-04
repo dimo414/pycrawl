@@ -4,7 +4,7 @@ Created on Feb 9, 2013
 @author: Michael Diamond
 '''
 
-import sys, time
+import logging, sys, time
 from datetime import datetime
 import urllib.parse as uparse
 import httplib2
@@ -21,17 +21,14 @@ class Crawler:
     """Crawler instances control a website crawl, making requests against
     the given URLs, performing the specified actions, and notably queuing
     valid lings found on the crawled pages for crawling as well.
-    
-    Crawling information like visited pages and errors are output to standard
-    error, leaving standard out availible for page actions to print to.
-    A common way to use a Crawler is like so:
-    crawl.py 2> /tmp/crawled_pages.txt | tee /tmp/crawl_results.txt
     """
     def __init__(self, test, action):
         """test: callable which expects a string URL parameter, and returns
         true if the given URL should be crawled.
         action: callable which expects a string URL and BeautifulSoup page object,
         and performs whatever actions should be done on the page."""
+        self.logger = logging.getLogger('crawler')
+        self.page = logging.getLogger('page').info
         self.hit_urls = set()
         self.max_urls = None
         self.max_hpm = None
@@ -89,10 +86,10 @@ class Crawler:
         Note that the initial URL is not checked against the crawler's test, only
         URLs found on page are subject to this filter."""
         startSet = len(self.hit_urls)
-        print("Starting crawl of %s" % url,file=sys.stderr)
+        self.page("Starting crawl of %s", url)
         sys.stderr.flush()
         self._crawl(url, depth)
-        print('Hit %d pages' % (len(self.hit_urls)-startSet), file=sys.stderr)
+        self.page('Hit %d pages', (len(self.hit_urls)-startSet))
         sys.stdout.flush()
         sys.stderr.flush()
     
@@ -122,11 +119,11 @@ class Crawler:
             sys.stderr.flush()
             
         if url in self.hit_urls or (self.max_urls and len(self.hit_urls) >= self.max_urls):
-            #print("Skipping %s" % url, file=sys.stderr)
+            #self.logger.debug("Skipping %s", url)
             return None
         
         try:
-            print("Crawling %s" % url, file=sys.stderr)
+            self.page("Crawling %s", url)
             self.hit_urls.add(url)
             response, soup = self.hitUrl(url)
             
@@ -136,7 +133,7 @@ class Crawler:
             self.action(url, soup)
             return soup
         except Exception as e:
-            print("Failed to crawl/parse %s\n  %s" % (url,e), file=sys.stderr)
+            self.logger.warn("Failed to crawl/parse %s\n  %s", url, e)
             return None
         
     def hitUrl(self, url):

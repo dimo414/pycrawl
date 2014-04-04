@@ -3,6 +3,7 @@ Created on Feb 8, 2013
 
 @author: Michael Diamond
 '''
+import logging
 import crawling
 
 class UrlTest:
@@ -19,7 +20,7 @@ class UrlTest:
     if /redirect.php?url=.... is used by a site to send users to external
     sites, you might want to extend isLocal to return false on such URLs."""
     def __init__(self):
-        pass
+        self.logger = logging.getLogger('test')
     
     def isLocal(self, url):
         """Only crawl URLs  local to the current host."""

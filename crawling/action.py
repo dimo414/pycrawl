@@ -4,7 +4,7 @@ Created on Feb 9, 2013
 @author: Michael Diamond
 '''
 
-import functools, re
+import functools, logging, re
 from crawling.test import basic as basic_t
 
 class SoupAction:
@@ -12,42 +12,43 @@ class SoupAction:
     methods used by a Crawler to inspect and act on a page's contents.
     
     Methods expect a URL and a BeautifulSoup object and carry out whatever
-    actions they need to.  Common behavior includes printing information
-    to standard output, writing data to a file, or initializing (preferably
+    actions they need to.  Common behavior includes logging information
+    to the result function, writing data to a file, or initializing (preferably
     asynchronously) some other behavior, like hitting a DB.
     Factory methods take other parameters, and return a function with the
     above signature.
     
     You can extend this class to implement site specific actions."""
     def __init__(self):
-        pass
+        self.logger = logging.getLogger('action')
+        self.result = logging.getLogger('result').info
     
     # TODO create func(url, soup) passable version of soup.findAll
     
     def findLink(self, string):
-        """Prints links (and the page they were found on) containing the given string."""
+        """Logs links (and the page they were found on) containing the given string."""
         def func(url, soup):
             for a in soup.findAll('a'):
                 if a.has_key('href') and string in a['href']:
-                    print('Found link to %s in %s' % (a['href'], url))
+                    self.result('Found link to %s in %s', a['href'], url)
         return func
     
     def findLinkPattern(self, pat):
-        """Prints links (and the page they were found on) matching the given pattern."""
+        """Logs links (and the page they were found on) matching the given pattern."""
         pattern = re.compile(pat)
         def func(url, soup):
             for a in soup.findAll('a'):
                 if a.has_key('href') and pattern.match(a['href']):
-                    print('Found link to %s in %s' % (a['href'], url))
+                    self.result('Found link to %s in %s', a['href'], url)
         return func
     
     def findLinkImg(self, string, one_per_page=False):
-      """Prints image URLs (and the page they were found on) with links to the given image URL."""
+      """Logs image URLs (and the page they were found on) with links to the given image URL."""
       def func(url, soup):
         for a in soup.findAll('a'):
           for img in a.findAll('img'):
             if img.has_key('src') and string in img['src']:
-              print('Found image link %s in %s' % (img['src'], url))
+              self.result('Found image link %s in %s', img['src'], url)
               if one_per_page:
                 return
       return func
@@ -55,19 +56,19 @@ class SoupAction:
     
     def findInternalNoFollow(self, checker=basic_t):
         """Looks for internal links (as determined by a UrlTest instance) which
-        have been nofollowed, and prints the link and the current URL."""
+        have been nofollowed, and logs the link and the current URL."""
         def func(url, soup):
             for a in soup.findAll('a'):
                 if a.has_key('href') and checker.isLocal(a['href']):
                     # worth flagging if rel exists at all, and sometimes people use 'nofollow="nofollow"' instead
                     if a.has_key('rel') or a.has_key('nofollow'):
-                        print("Found nofollow to %s from %s" % (a['href'],url))
+                        self.result("Found nofollow to %s from %s", a['href'], url)
         return func
     
     # http://www.crummy.com/software/BeautifulSoup/bs3/documentation.html#The basic find method: findAll(name, attrs, recursive, text, limit, **kwargs)
-    def tagContains(self, tag, pat, attrs={}, printTag=False):
-        """Searches for tags containing the given pattern, and prints
-        the URL and the matched contents, or the whole tag if printTag is True.
+    def tagContains(self, tag, pat, attrs={}, logTag=False):
+        """Searches for tags containing the given pattern, and logs
+        the URL and the matched contents, or the whole tag if logTag is True.
         
         tag and attrs params are passed to BS's findAll method, and can take any
         appropriate values.  If pattern is not set, all tags match."""
@@ -75,20 +76,20 @@ class SoupAction:
         def func(url, soup):
             for t in soup.findAll(tag, attrs):
                 if not pattern or (t.string and pattern.search(t.string) is not None):
-                    print("%s: %s" % (url, (str(t) if printTag else t.string)))
+                    self.result("%s: %s", url, (str(t) if logTag else t.string))
         return func
     
     # TODO use partials
-    def findClass(self, cls, printTag=False):
-        """Searches for tags with the given class, and prints
-        the URL and the matched contents, or the whole tag if printTag is True.
+    def findClass(self, cls, logTag=False):
+        """Searches for tags with the given class, and logs
+        the URL and the matched contents, or the whole tag if logTag is True.
         
         tag and attrs params are passed to BS's findAll method, and can take any
         appropriate values.  If pattern is not set, all tags match."""
-        return self.tagContains(True, None, {'class': cls}, printTag)
+        return self.tagContains(True, None, {'class': cls}, logTag)
     
     def pageTitleContains(self, pat):
-        """Prints URLs and page title for pages with titles matching the given pattern."""
+        """Logs URLs and page title for pages with titles matching the given pattern."""
         return self.tagContains('title', pat)
     
     def _tagPath(self, tag, incIndicies=False):
