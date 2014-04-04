@@ -9,7 +9,7 @@ if sys.version_info < (3, 0):
     sys.stdout.write("PyCrawl is a Python 3 app.  Go upgrade already.")
     sys.exit(1)
 
-import logging, re
+import logging
 from optparse import OptionParser
 from crawling import test, action
 from crawling.crawler import Crawler
@@ -32,6 +32,8 @@ def configure(argv):
                         datefmt='%m-%d %H:%M',
                         filename=os.path.join(opts.log_dir, 'pycrawl.full.log'),
                         filemode='w')
+    
+    logging.getLogger('misconfigured').setLevel(logging.FATAL)
     
     just_message_fmt = logging.Formatter('%(message)s')
     

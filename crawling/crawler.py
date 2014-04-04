@@ -85,6 +85,7 @@ class Crawler:
         depth-1 until depth = 0 or the maximum number of pages has been reached.
         Note that the initial URL is not checked against the crawler's test, only
         URLs found on page are subject to this filter."""
+        logging.getLogger('misconfigured').error("You shouldn't see this message, logging may be misconfigured.  Did you call crawl.configure()?")
         startSet = len(self.hit_urls)
         self.page("Starting crawl of %s to %s depth", url, depth)
         sys.stderr.flush()
