@@ -20,7 +20,7 @@ http = httplib2.Http()
 class Crawler:
     """Crawler instances control a website crawl, making requests against
     the given URLs, performing the specified actions, and notably queuing
-    valid lings found on the crawled pages for crawling as well.
+    valid links found on the crawled pages for crawling as well.
     """
     def __init__(self, test, action):
         """test: callable which expects a string URL parameter, and returns
